@@ -27,7 +27,7 @@ pdfs/
 temp_*.mp3
 # *.mp3
 *.log
-
+.cursor/
 # IDE
 .vscode/
 .idea/
