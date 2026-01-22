@@ -25,7 +25,7 @@ pdfs/
 
 # Temporary files
 temp_*.mp3
-*.mp3
+# *.mp3
 *.log
 
 # IDE
