@@ -104,8 +104,10 @@ python main.py --tts --tts-format txt
 ```
 ## Example Output
 
-🎧 **Sample Audiobook**:  
-[Listen to sample (MP3)](https://raw.githubusercontent.com/Herc-Ch/Audio-Or-It-Didnt-Happen/main/output/audiobooks/audiobook.mp3)
+🎧 **Sample Audiobook**  
+▶️ Listen here:  
+https://github.com/Herc-Ch/Audio-Or-It-Didnt-Happen/releases/download/v0.1/v0.1 - audiobook.mp3
+
 
 
 
