@@ -106,7 +106,7 @@ python main.py --tts --tts-format txt
 
 🎧 **Sample Audiobook**  
 ▶️ Listen here:  
-https://github.com/Herc-Ch/Audio-Or-It-Didnt-Happen/releases/download/v0.1/v0.1 - audiobook.mp3
+https://github.com/Herc-Ch/Audio-Or-It-Didnt-Happen/releases/download/v0.1/v0.1 – Sample Audiobook.mp3
 
 
 
