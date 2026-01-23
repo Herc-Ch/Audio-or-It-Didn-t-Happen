@@ -108,7 +108,8 @@ def main():
                 output_mp3.parent.mkdir(exist_ok=True)
                 
                 print(f"   Processing: {txt_file.name}")
-                success = convert_to_mp3(txt_file, output_mp3)
+                # Use request stitching for text pipeline (better prosody)
+                success = convert_to_mp3(txt_file, output_mp3, use_request_stitching=True)
                 if success:
                     print(f"   ✅ Created: {output_mp3}")
                 else:

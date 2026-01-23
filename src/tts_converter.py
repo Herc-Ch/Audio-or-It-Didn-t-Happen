@@ -1,10 +1,12 @@
 """
 TTS converter for ElevenLabs multi-voice audiobook generation.
 Converts XML or TXT files to MP3 using ElevenLabs API.
+Supports request stitching for better prosody continuity in text pipeline.
 """
 import os
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -103,7 +105,8 @@ def parse_txt(txt_file_path: Path):
 def convert_to_mp3(
     file_path: Path,
     output_file: Path,
-    max_workers: int = 5
+    max_workers: int = 5,
+    use_request_stitching: bool = False
 ) -> bool:
     """
     Convert XML or TXT file to MP3 audiobook using ElevenLabs TTS.
@@ -111,7 +114,9 @@ def convert_to_mp3(
     Args:
         file_path: Path to input XML or TXT file
         output_file: Path to output MP3 file
-        max_workers: Maximum concurrent TTS requests
+        max_workers: Maximum concurrent TTS requests (only used if not using request stitching)
+        use_request_stitching: Use request stitching for better prosody continuity
+                              (only works with eleven_multilingual_v2 model, requires sequential processing)
         
     Returns:
         True if successful, False otherwise
@@ -140,8 +145,20 @@ def convert_to_mp3(
         return False
     
     # Determine model based on file type
-    model_id = "eleven_multilingual_v2" if file_ext == '.txt' else "eleven_v3"
+    # Request stitching only works with eleven_multilingual_v2
+    if use_request_stitching:
+        model_id = "eleven_multilingual_v2"
+        print("🔗 Using request stitching for better prosody continuity...")
+    else:
+        model_id = "eleven_multilingual_v2" if file_ext == '.txt' else "eleven_v3"
     
+    # Use request stitching for text pipeline (TXT files)
+    if use_request_stitching:
+        return _convert_with_request_stitching(
+            elevenlabs, segments, output_file, model_id
+        )
+    
+    # Standard parallel processing for XML files
     def generate_segment(i, character, text):
         """Generate audio for a single segment."""
         voice_id = VOICE_DICT.get(character, VOICE_DICT["narrator"])
@@ -240,5 +257,120 @@ def convert_to_mp3(
                 os.remove(file)
             except Exception as e:
                 print(f"⚠️  Warning: Could not remove {file}: {e}")
+    
+    return True
+
+
+def _convert_with_request_stitching(
+    elevenlabs: ElevenLabs,
+    segments: list,
+    output_file: Path,
+    model_id: str
+) -> bool:
+    """
+    Convert segments to MP3 using request stitching for better prosody continuity.
+    
+    Request stitching requires sequential processing and only works with
+    eleven_multilingual_v2 model. It maintains voice prosody across segments.
+    
+    Args:
+        elevenlabs: ElevenLabs client instance
+        segments: List of (character, text) tuples
+        output_file: Path to output MP3 file
+        model_id: Model ID (must be eleven_multilingual_v2)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    if model_id != "eleven_multilingual_v2":
+        print("⚠️  Warning: Request stitching only works with eleven_multilingual_v2. Falling back to standard processing.")
+        return False
+    
+    print(f"🎙️  Generating audio for {len(segments)} segments with request stitching...")
+    
+    request_ids = []
+    audio_buffers = []
+    
+    # Process segments sequentially (required for request stitching)
+    for i, (character, text) in enumerate(segments):
+        voice_id = VOICE_DICT.get(character, VOICE_DICT["narrator"])
+        
+        try:
+            # Use with_raw_response to get request ID from headers
+            with elevenlabs.text_to_speech.with_raw_response.convert(
+                text=text,
+                voice_id=voice_id,
+                model_id=model_id,
+                previous_request_ids=request_ids,
+                output_format="mp3_44100_128",
+            ) as response:
+                # Extract request ID from response headers
+                request_id = response._response.headers.get("request-id")
+                if request_id:
+                    request_ids.append(request_id)
+                
+                # Read all audio data from the stream
+                audio_data = b''.join(chunk for chunk in response.data)
+                audio_buffers.append(BytesIO(audio_data))
+                
+                print(f"  ✓ Completed segment {i+1}/{len(segments)}")
+                
+        except Exception as e:
+            print(f"  ⚠️  Error processing segment {i+1}: {e}")
+            # Fallback to narrator voice if character voice fails
+            if character != "narrator":
+                try:
+                    voice_id = VOICE_DICT["narrator"]
+                    with elevenlabs.text_to_speech.with_raw_response.convert(
+                        text=text,
+                        voice_id=voice_id,
+                        model_id=model_id,
+                        previous_request_ids=request_ids,
+                        output_format="mp3_44100_128",
+                    ) as response:
+                        request_id = response._response.headers.get("request-id")
+                        if request_id:
+                            request_ids.append(request_id)
+                        audio_data = b''.join(chunk for chunk in response.data)
+                        audio_buffers.append(BytesIO(audio_data))
+                        print(f"  ✓ Completed segment {i+1}/{len(segments)} (using narrator fallback)")
+                except Exception as e2:
+                    print(f"  ❌ Failed to process segment {i+1} even with fallback: {e2}")
+                    return False
+            else:
+                return False
+    
+    # Combine all audio buffers
+    print(f"🔗 Combining {len(audio_buffers)} audio segments...")
+    combined_audio_data = b''.join(buffer.getvalue() for buffer in audio_buffers)
+    
+    # Save to temporary file first for validation
+    temp_file = "temp_stitched.mp3"
+    with open(temp_file, "wb") as f:
+        f.write(combined_audio_data)
+    
+    # Validate the combined audio
+    try:
+        test_audio = AudioSegment.from_mp3(temp_file)
+        if len(test_audio) == 0:
+            print("❌ Error: Combined audio file is empty")
+            os.remove(temp_file)
+            return False
+    except Exception as e:
+        print(f"❌ Error: Invalid combined MP3 file: {e}")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        return False
+    
+    # Export final file
+    test_audio.export(str(output_file), format="mp3")
+    print(f"✅ Successfully created {output_file}")
+    
+    # Clean up temp file
+    if os.path.exists(temp_file):
+        try:
+            os.remove(temp_file)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not remove {temp_file}: {e}")
     
     return True

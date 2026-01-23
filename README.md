@@ -10,7 +10,8 @@ Complete pipeline for converting PDFs to multi-voice audiobooks using LLM-powere
 - **Plain text output** → Markdown → `.txt` via `pandoc` (better for TTS)
 - **LLM-powered XML conversion** → Dialogue detection, speaker identification, and audio tag insertion using OpenAI
 - **ElevenLabs XML/SSML output** → `<voice name="...">...</voice>` segments ready for multi-voice TTS
-- **Optional MP3 generation** → Converts XML/TXT to audiobook using ElevenLabs API with parallel processing
+- **Optional MP3 generation** → Converts XML/TXT to audiobook using ElevenLabs API
+- **Request stitching** → Automatically uses request stitching for TXT files to maintain voice prosody continuity
 - **Content validation** → Warns when XML appears to drop content beyond tolerance
 
 ## Installation
@@ -99,9 +100,11 @@ python main.py --input-dir /path/to/pdfs --output-dir /path/to/output
 # Skip XML conversion (only generate cleaned text)
 python main.py --no-xml
 
-# Generate TTS from TXT files instead of XML (narrator only)
+# Generate TTS from TXT files instead of XML (narrator only, uses request stitching)
 python main.py --tts --tts-format txt
 ```
+
+**Request Stitching**: When using `--tts-format txt`, the pipeline automatically uses [ElevenLabs request stitching](https://elevenlabs.io/docs/developers/guides/cookbooks/text-to-speech/request-stitching) to maintain better voice prosody continuity across segments. This provides more natural-sounding narration for long texts.
 ## Example Output
 
 🎧 **Sample Audiobook**: [Listen to sample](output/audiobooks/audiobook.mp3)
@@ -168,6 +171,9 @@ Character voices are configured in `src/tts_converter.py` in the `VOICE_DICT` ma
 ## Notes
 
 - XML conversion uses OpenAI LLM (default: `gpt-5.2`) for dialogue detection
-- TTS generation processes segments in parallel (max 5 concurrent requests)
+- **TTS generation**:
+  - XML files: Processes segments in parallel (max 5 concurrent requests) using `eleven_v3` model
+  - TXT files: Uses request stitching with sequential processing for better prosody continuity using `eleven_multilingual_v2` model
 - Short narrator segments are automatically merged with character segments to avoid jarring voice switches
 - Content validation warns if >5% content is missing, errors if >20% missing
+- Request stitching maintains voice prosody by providing context from previous segments, resulting in more natural-sounding audiobooks
