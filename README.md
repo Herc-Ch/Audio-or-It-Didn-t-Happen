@@ -107,12 +107,12 @@ python main.py --tts --tts-format txt
 **Request Stitching**: When using `--tts-format txt`, the pipeline automatically uses [ElevenLabs request stitching](https://elevenlabs.io/docs/developers/guides/cookbooks/text-to-speech/request-stitching) to maintain better voice prosody continuity across segments. This provides more natural-sounding narration for long texts.
 ## Example Output
 
-🎧 **Sample Audiobook**: [Listen to sample](output/audiobooks/audiobook.mp3)
+🎧 **Sample Audiobook**  
+▶️ Listen here:  
+[audiobook.mp3](https://github.com/user-attachments/files/24795547/audiobook.mp3)
 
-<audio controls>
-  <source src="output/audiobooks/audiobook.mp3" type="audio/mpeg">
-  Your browser does not support the audio element.
-</audio>
+
+
 
 
 ## Environment Variables
